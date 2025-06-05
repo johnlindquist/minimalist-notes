@@ -39,13 +39,41 @@ export async function POST(request: NextRequest) {
     }
 }
 
-export async function GET(request: NextRequest) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function GET(_request: NextRequest) {
     console.log("Received GET request to /api/notes");
     try {
         console.log(`Returning ${notes.length} notes`);
         return NextResponse.json(notes, { status: 200 });
     } catch (error) {
         console.error("Error processing GET request:", error);
+        return NextResponse.json({ error: 'Error processing request' }, { status: 500 });
+    }
+}
+
+export async function DELETE(request: NextRequest) {
+    console.log("Received DELETE request to /api/notes");
+    try {
+        const { searchParams } = new URL(request.url);
+        const noteId = searchParams.get('id');
+
+        if (!noteId) {
+            console.log("Missing noteId for DELETE request");
+            return NextResponse.json({ error: 'Note ID is required' }, { status: 400 });
+        }
+
+        const noteIndex = notes.findIndex(note => note.id === noteId);
+
+        if (noteIndex === -1) {
+            console.log(`Note with ID ${noteId} not found for DELETE request`);
+            return NextResponse.json({ error: 'Note not found' }, { status: 404 });
+        }
+
+        const deletedNote = notes.splice(noteIndex, 1)[0];
+        console.log("Note deleted:", deletedNote);
+        return NextResponse.json({ message: 'Note deleted successfully', note: deletedNote }, { status: 200 }); // Or 204 if no content
+    } catch (error) {
+        console.error("Error processing DELETE request:", error);
         return NextResponse.json({ error: 'Error processing request' }, { status: 500 });
     }
 }
