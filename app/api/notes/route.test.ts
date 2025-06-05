@@ -1,73 +1,125 @@
 /**
  * @jest-environment node
  */
-import { POST } from './route';
+import { POST, GET, notes as notesStore } from './route';
 import { NextRequest } from 'next/server';
+import { randomUUID as mockRandomUUID } from 'crypto';
 
 // Mock crypto.randomUUID to ensure predictable IDs in tests
 jest.mock('crypto', () => ({
     ...jest.requireActual('crypto'),
-    randomUUID: jest.fn(() => 'test-uuid-123'),
+    randomUUID: jest.fn(),
 }));
 
 // Helper to create a mock NextRequest
-const createMockRequest = (body: any, method: string = 'POST'): NextRequest => {
-    return new NextRequest('http://localhost/api/notes', {
-        method,
-        body: JSON.stringify(body),
-        headers: { 'Content-Type': 'application/json' },
-    }) as NextRequest;
+const createMockRequest = (body?: any, method: string = 'POST', url: string = 'http://localhost/api/notes'): NextRequest => {
+    const requestOptions: any = { method };
+    if (body) {
+        requestOptions.body = JSON.stringify(body);
+        requestOptions.headers = { 'Content-Type': 'application/json' };
+    }
+    return new NextRequest(url, requestOptions) as NextRequest;
 };
 
-describe('POST /api/notes', () => {
-    // Clear mocks before each test to reset call counts, etc.
+describe('API /api/notes', () => {
     beforeEach(() => {
-        jest.clearAllMocks();
-        // Reset notes array before each test to ensure test isolation
-        // This requires exporting and importing the notes array, or having a reset function.
-        // For now, we acknowledge this limitation as the array is module-scoped in route.ts
-        // and not easily resettable without modifying the main route file for testability.
+        notesStore.length = 0;
+        (mockRandomUUID as jest.Mock).mockClear();
+        (mockRandomUUID as jest.Mock).mockReturnValue('test-uuid-123');
     });
 
-    it('should create a note successfully and return 201', async () => {
-        const req = createMockRequest({ content: 'My first test note' });
-        const response = await POST(req);
-        const data = await response.json();
+    describe('POST /api/notes', () => {
+        it('should create a note successfully and return 201', async () => {
+            const req = createMockRequest({ content: 'My first test note' });
+            const response = await POST(req);
+            const data = await response.json();
 
-        expect(response.status).toBe(201);
-        expect(data.id).toBe('test-uuid-123');
-        expect(data.content).toBe('My first test note');
-        expect(data.createdAt).toBeDefined();
+            expect(response.status).toBe(201);
+            expect(data.id).toBe('test-uuid-123');
+            expect(data.content).toBe('My first test note');
+            expect(data.createdAt).toBeDefined();
+            expect(notesStore.length).toBe(1);
+            expect(notesStore[0].content).toBe('My first test note');
+        });
+
+        it('should return 400 if content is missing', async () => {
+            const req = createMockRequest({});
+            const response = await POST(req);
+            const data = await response.json();
+
+            expect(response.status).toBe(400);
+            expect(data.error).toBe('Content is required');
+            expect(notesStore.length).toBe(0);
+        });
+
+        it('should return 400 if content is an empty string', async () => {
+            const req = createMockRequest({ content: '' });
+            const response = await POST(req);
+            const data = await response.json();
+
+            expect(response.status).toBe(400);
+            expect(data.error).toBe('Content is required');
+            expect(notesStore.length).toBe(0);
+        });
+
+        it('should return 400 if request body is not valid JSON', async () => {
+            const req = new NextRequest('http://localhost/api/notes', {
+                method: 'POST',
+                body: 'not a valid json string',
+                headers: { 'Content-Type': 'application/json' },
+            }) as NextRequest;
+            const response = await POST(req);
+            const data = await response.json();
+
+            expect(response.status).toBe(400);
+            expect(data.error).toBe('Invalid JSON in request body');
+            expect(notesStore.length).toBe(0);
+        });
     });
 
-    it('should return 400 if content is missing', async () => {
-        const req = createMockRequest({}); // No content field
-        const response = await POST(req);
-        const data = await response.json();
+    describe('GET /api/notes', () => {
+        it('should return an empty array initially when no notes exist', async () => {
+            const req = createMockRequest(undefined, 'GET');
+            const response = await GET(req);
+            const data = await response.json();
 
-        expect(response.status).toBe(400);
-        expect(data.error).toBe('Content is required');
-    });
+            expect(response.status).toBe(200);
+            expect(data).toEqual([]);
+        });
 
-    it('should return 400 if content is an empty string', async () => {
-        const req = createMockRequest({ content: '' }); // Empty content string
-        const response = await POST(req);
-        const data = await response.json();
+        it('should return notes after they are created', async () => {
+            await POST(createMockRequest({ content: 'Note 1 for GET test' }));
 
-        expect(response.status).toBe(400);
-        expect(data.error).toBe('Content is required');
-    });
+            const req = createMockRequest(undefined, 'GET');
+            const response = await GET(req);
+            const data = await response.json();
 
-    it('should return 500 if request body is not valid JSON', async () => {
-        const req = new NextRequest('http://localhost/api/notes', {
-            method: 'POST',
-            body: 'not json',
-            headers: { 'Content-Type': 'application/json' },
-        }) as NextRequest;
-        const response = await POST(req);
-        const data = await response.json();
+            expect(response.status).toBe(200);
+            expect(data).toHaveLength(1);
+            expect(data[0].content).toBe('Note 1 for GET test');
+            expect(data[0].id).toBe('test-uuid-123');
+        });
 
-        expect(response.status).toBe(500);
-        expect(data.error).toBe('Error processing request');
+        it('should return multiple notes correctly', async () => {
+            (mockRandomUUID as jest.Mock)
+                .mockReturnValueOnce('uuid-get-multi-1')
+                .mockReturnValueOnce('uuid-get-multi-2');
+
+            await POST(createMockRequest({ content: 'Multi-note 1' }));
+            await POST(createMockRequest({ content: 'Multi-note 2' }));
+
+            const req = createMockRequest(undefined, 'GET');
+            const response = await GET(req);
+            const data = await response.json();
+
+            expect(response.status).toBe(200);
+            expect(data).toHaveLength(2);
+            const note1 = data.find(note => note.content === 'Multi-note 1');
+            const note2 = data.find(note => note.content === 'Multi-note 2');
+            expect(note1).toBeDefined();
+            expect(note2).toBeDefined();
+            expect(note1.id).toBe('uuid-get-multi-1');
+            expect(note2.id).toBe('uuid-get-multi-2');
+        });
     });
 }); 
