@@ -107,4 +107,39 @@ paths:
           content:
             application/json:
               schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Delete a note
+      description: Deletes a note by its ID.
+      operationId: deleteNote
+      tags:
+        - Notes
+      parameters:
+        - name: id
+          in: query
+          required: true
+          description: ID of the note to delete
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Note deleted successfully
+        '400':
+          description: Bad Request (e.g., invalid ID format)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Note not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
                 $ref: '#/components/schemas/ErrorResponse' 
