@@ -1,0 +1,110 @@
+openapi: 3.0.0
+info:
+  title: Minimalist Notes API
+  version: v1.0.0
+  description: API for managing notes.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+servers:
+  - url: / # Using relative URL as host can vary
+    description: API Server
+
+# Indicate that by default, no security is applied to operations
+security:
+  - {}
+
+components:
+  schemas:
+    Note:
+      type: object
+      required:
+        - id
+        - content
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the note.
+          example: "a1b2c3d4-e5f6-7890-1234-567890abcdef"
+        content:
+          type: string
+          description: The content of the note.
+          example: "This is my first note."
+        createdAt:
+          type: string
+          format: date-time
+          description: The date and time the note was created.
+          example: "2023-10-27T10:30:00Z"
+    NewNote:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: string
+          description: The content for the new note.
+          example: "A new note to be created."
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: A message describing the error.
+          example: "Content is required"
+
+paths:
+  /api/notes:
+    get:
+      summary: Retrieve all notes
+      description: Returns a list of all notes.
+      operationId: getNotes
+      tags:
+        - Notes
+      responses:
+        '200':
+          description: A list of notes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Note'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Create a new note
+      description: Creates a new note with the provided content.
+      operationId: createNote
+      tags:
+        - Notes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewNote'
+      responses:
+        '201':
+          description: Note created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Note'
+        '400':
+          description: Bad Request (e.g., missing content, invalid JSON)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse' 
