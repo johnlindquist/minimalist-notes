@@ -1,7 +1,7 @@
 /**
  * @jest-environment node
  */
-import { POST, GET, notes as notesStore } from './route';
+import { POST, GET, DELETE, notes as notesStore } from './route';
 import { NextRequest } from 'next/server';
 import { randomUUID as mockRandomUUID } from 'crypto';
 
@@ -12,8 +12,8 @@ jest.mock('crypto', () => ({
 }));
 
 // Helper to create a mock NextRequest
-const createMockRequest = (body?: any, method: string = 'POST', url: string = 'http://localhost/api/notes'): NextRequest => {
-    const requestOptions: any = { method };
+const createMockRequest = (body?: Record<string, unknown> | undefined, method: string = 'POST', url: string = 'http://localhost/api/notes'): NextRequest => {
+    const requestOptions: RequestInit = { method };
     if (body) {
         requestOptions.body = JSON.stringify(body);
         requestOptions.headers = { 'Content-Type': 'application/json' };
@@ -120,6 +120,69 @@ describe('API /api/notes', () => {
             expect(note2).toBeDefined();
             expect(note1.id).toBe('uuid-get-multi-1');
             expect(note2.id).toBe('uuid-get-multi-2');
+        });
+    });
+
+    describe('DELETE /api/notes', () => {
+        it('should delete a note successfully and return 200', async () => {
+            // First, create a note
+            (mockRandomUUID as jest.Mock).mockReturnValueOnce('note-to-delete-uuid');
+            const createReq = createMockRequest({ content: 'Note to be deleted' });
+            await POST(createReq);
+            expect(notesStore.length).toBe(1);
+            expect(notesStore[0].id).toBe('note-to-delete-uuid');
+
+            const deleteReq = createMockRequest(undefined, 'DELETE', 'http://localhost/api/notes?id=note-to-delete-uuid');
+            const response = await DELETE(deleteReq);
+            const data = await response.json();
+
+            expect(response.status).toBe(200);
+            expect(data.message).toBe('Note deleted successfully');
+            expect(data.note.id).toBe('note-to-delete-uuid');
+            expect(notesStore.length).toBe(0);
+        });
+
+        it('should return 400 if note ID is missing', async () => {
+            const deleteReq = createMockRequest(undefined, 'DELETE', 'http://localhost/api/notes'); // No id query param
+            const response = await DELETE(deleteReq);
+            const data = await response.json();
+
+            expect(response.status).toBe(400);
+            expect(data.error).toBe('Note ID is required');
+        });
+
+        it('should return 404 if note is not found', async () => {
+            const deleteReq = createMockRequest(undefined, 'DELETE', 'http://localhost/api/notes?id=non-existent-uuid');
+            const response = await DELETE(deleteReq);
+            const data = await response.json();
+
+            expect(response.status).toBe(404);
+            expect(data.error).toBe('Note not found');
+            expect(notesStore.length).toBe(0); // Ensure no notes were accidentally deleted or added
+        });
+
+        it('should not delete other notes when deleting a specific note', async () => {
+            // Create multiple notes
+            (mockRandomUUID as jest.Mock)
+                .mockReturnValueOnce('uuid-delete-1')
+                .mockReturnValueOnce('uuid-delete-2')
+                .mockReturnValueOnce('uuid-delete-3');
+            await POST(createMockRequest({ content: 'Note D1' }));
+            await POST(createMockRequest({ content: 'Note D2 to delete' }));
+            await POST(createMockRequest({ content: 'Note D3' }));
+
+            expect(notesStore.length).toBe(3);
+
+            const deleteReq = createMockRequest(undefined, 'DELETE', 'http://localhost/api/notes?id=uuid-delete-2');
+            const response = await DELETE(deleteReq);
+
+            expect(response.status).toBe(200);
+            expect(notesStore.length).toBe(2);
+
+            const remainingIds = notesStore.map(note => note.id);
+            expect(remainingIds).toContain('uuid-delete-1');
+            expect(remainingIds).not.toContain('uuid-delete-2');
+            expect(remainingIds).toContain('uuid-delete-3');
         });
     });
 }); 
